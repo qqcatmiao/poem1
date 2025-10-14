@@ -1,1 +1,8 @@
-{"regions": ["hkg1"]}
+{
+  "regions": ["hkg1", "sin1", "icn1"],
+  "build": {
+    "env": {
+      "VERCEL_REGION": "hkg1"
+    }
+  }
+}
