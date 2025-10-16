@@ -3,5 +3,6 @@
     "env": {
       "VERCEL_REGION": "hkg1"
     }
-  }
+  },
+  "regions": ["hkg1"]
 }
