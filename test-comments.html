@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试评论功能</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; font-family: monospace; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        .comment { margin: 10px 0; padding: 10px; border: 1px solid #eee; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>测试评论功能</h1>
+        
+        <div class="section">
+            <h3>1. 检查评论表数据</h3>
+            <button onclick="getAllComments()">查看所有评论</button>
+            <div id="all-comments-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>2. 检查评论表RLS策略</h3>
+            <button onclick="checkCommentsRLS()">检查RLS策略</button>
+            <div id="rls-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>3. 测试添加评论</h3>
+            <div>
+                <input type="text" id="test-poem-id" placeholder="诗词ID（可选）" style="width: 200px;">
+                <textarea id="test-comment-content" placeholder="测试评论内容" style="width: 100%; height: 60px; margin: 5px 0;"></textarea>
+                <button onclick="testAddComment()">测试添加评论</button>
+            </div>
+            <div id="add-comment-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>4. 检查评论表结构</h3>
+            <button onclick="checkCommentsStructure()">检查表结构</button>
+            <div id="structure-result" class="result"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // 初始化Supabase客户端
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = isError ? 'result error' : 'result success';
+        }
+        
+        async function getAllComments() {
+            showResult('all-comments-result', '正在获取所有评论...');
+            try {
+                const { data, error } = await supabase
+                    .from('comments')
+                    .select(`
+                        *,
+                        profiles (username),
+                        poems (title)
+                    `)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+                
+                if (error) {
+                    showResult('all-comments-result', '获取失败: ' + error.message, true);
+                } else {
+                    if (data.length === 0) {
+                        showResult('all-comments-result', '评论表为空，暂无评论数据');
+                    } else {
+                        const result = data.map((comment, index) => 
+                            `评论 ${index + 1}:\n` +
+                            `- ID: ${comment.id}\n` +
+                            `- 内容: ${comment.content}\n` +
+                            `- 用户: ${comment.profiles?.username || '未知用户'}\n` +
+                            `- 诗词: ${comment.poems?.title || '未知诗词'}\n` +
+                            `- 时间: ${comment.created_at}\n` +
+                            `---`
+                        ).join('\n');
+                        
+                        showResult('all-comments-result', 
+                            `总共找到 ${data.length} 条评论:\n\n${result}`
+                        );
+                    }
+                }
+            } catch (error) {
+                showResult('all-comments-result', '获取异常: ' + error.message, true);
+            }
+        }
+        
+        async function checkCommentsRLS() {
+            showResult('rls-result', '正在检查评论表RLS策略...');
+            try {
+                // 使用SQL查询检查RLS策略
+                const { data, error } = await supabase.rpc('get_comments_rls_policies');
+                
+                if (error) {
+                    // 如果RPC不存在，使用直接查询
+                    const { data: policies, error: queryError } = await supabase
+                        .from('comments')
+                        .select('*')
+                        .limit(1);
+                    
+                    if (queryError) {
+                        showResult('rls-result', 
+                            `RLS策略检查结果:\n` +
+                            `错误信息: ${queryError.message}\n` +
+                            `可能原因: RLS策略限制了查询访问`
+                        );
+                    } else {
+                        showResult('rls-result', 
+                            `RLS策略检查结果:\n` +
+                            `可以正常查询评论表\n` +
+                            `SELECT策略: 允许`
+                        );
+                    }
+                } else {
+                    showResult('rls-result', 
+                        `RLS策略详情:\n${JSON.stringify(data, null, 2)}`
+                    );
+                }
+            } catch (error) {
+                showResult('rls-result', '检查异常: ' + error.message, true);
+            }
+        }
+        
+        async function testAddComment() {
+            const content = document.getElementById('test-comment-content').value.trim();
+            const poemId = document.getElementById('test-poem-id').value.trim();
+            
+            if (!content) {
+                showResult('add-comment-result', '请输入评论内容', true);
+                return;
+            }
+            
+            showResult('add-comment-result', '正在测试添加评论...');
+            try {
+                // 如果没有指定诗词ID，使用第一首诗词的ID
+                let targetPoemId = poemId;
+                if (!targetPoemId) {
+                    const { data: poems } = await supabase
+                        .from('poems')
+                        .select('id')
+                        .limit(1);
+                    
+                    if (poems && poems.length > 0) {
+                        targetPoemId = poems[0].id;
+                    } else {
+                        showResult('add-comment-result', '没有找到可用的诗词', true);
+                        return;
+                    }
+                }
+                
+                const { data, error } = await supabase
+                    .from('comments')
+                    .insert([{
+                        content: content,
+                        poem_id: targetPoemId,
+                        user_id: (await supabase.auth.getUser()).data.user?.id
+                    }])
+                    .select();
+                
+                if (error) {
+                    showResult('add-comment-result', 
+                        `添加评论失败:\n` +
+                        `错误: ${error.message}\n` +
+                        `代码: ${error.code}\n` +
+                        `详情: ${error.details}`, 
+                        true
+                    );
+                } else {
+                    showResult('add-comment-result', 
+                        `✓ 评论添加成功！\n` +
+                        `评论ID: ${data[0].id}\n` +
+                        `内容: ${data[0].content}\n` +
+                        `诗词ID: ${data[0].poem_id}`
+                    );
+                }
+            } catch (error) {
+                showResult('add-comment-result', '添加异常: ' + error.message, true);
+            }
+        }
+        
+        async function checkCommentsStructure() {
+            showResult('structure-result', '正在检查评论表结构...');
+            try {
+                const { data, error } = await supabase
+                    .from('comments')
+                    .select('*')
+                    .limit(1);
+                
+                if (error) {
+                    showResult('structure-result', '检查失败: ' + error.message, true);
+                } else if (data && data.length > 0) {
+                    const sample = data[0];
+                    const columns = Object.keys(sample);
+                    
+                    showResult('structure-result', 
+                        `评论表结构:\n` +
+                        `列名: ${columns.join(', ')}\n\n` +
+                        `示例数据:\n` +
+                        JSON.stringify(sample, null, 2)
+                    );
+                } else {
+                    showResult('structure-result', '评论表为空，无法检查结构');
+                }
+            } catch (error) {
+                showResult('structure-result', '检查异常: ' + error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

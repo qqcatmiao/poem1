@@ -29,9 +29,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { supabase, TABLES } from '../supabase'
+
+const notification = inject('notification')
 
 const authStore = useAuthStore()
 const favorites = ref([])
@@ -39,26 +41,22 @@ const favorites = ref([])
 const loadFavorites = async () => {
   if (!authStore.user) return
 
-  const { data, error } = await supabase
-    .from(TABLES.FAVORITES)
-    .select(`
-      *,
-      poems (
+  try {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .select(`
         *,
-        poets (name)
-      )
-    `)
-    .eq('user_id', authStore.user.id)
-    .order('created_at', { ascending: false })
+        poems (*)
+      `)
+      .eq('user_id', authStore.user.id)
+      .order('created_at', { ascending: false })
 
-  if (!error) {
-    favorites.value = data.map(fav => ({
-      ...fav,
-      poems: {
-        ...fav.poems,
-        poet_name: fav.poems.poets.name
-      }
-    }))
+    if (error) throw error
+    
+    favorites.value = data || []
+  } catch (error) {
+    console.error('加载收藏列表失败:', error)
+    favorites.value = []
   }
 }
 
@@ -69,6 +67,7 @@ const removeFavorite = async (favorite) => {
     .eq('id', favorite.id)
 
   if (!error) {
+    notification.success('已取消收藏')
     loadFavorites()
   }
 }

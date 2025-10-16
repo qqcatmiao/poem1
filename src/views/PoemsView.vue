@@ -29,9 +29,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { supabase, TABLES } from '../supabase'
+
+const notification = inject('notification')
 
 const authStore = useAuthStore()
 const poems = ref([])
@@ -63,10 +65,12 @@ const toggleFavorite = async (poem) => {
       .delete()
       .eq('poem_id', poem.id)
       .eq('user_id', authStore.user.id)
+    notification.success('已取消收藏')
   } else {
     await supabase
       .from(TABLES.FAVORITES)
       .insert([{ poem_id: poem.id, user_id: authStore.user.id }])
+    notification.success('收藏成功！')
   }
   loadFavorites()
 }

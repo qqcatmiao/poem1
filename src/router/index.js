@@ -44,4 +44,20 @@ const router = createRouter({
   routes
 })
 
+import { useAuthStore } from '../stores/auth'
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
+  
+  if (to.meta.requiresAuth && !authStore.user) {
+    next({
+      path: '/login',
+      query: { redirect: to.fullPath }
+    })
+  } else {
+    next()
+  }
+})
+
 export default router

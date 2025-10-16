@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>搜索功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>搜索功能测试</h1>
+        
+        <div class="section">
+            <h3>1. 检查诗词数据</h3>
+            <button onclick="checkPoemsData()">检查诗词表数据</button>
+            <div id="poems-data-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>2. 测试搜索功能</h3>
+            <div>
+                <input type="text" id="search-term" placeholder="输入搜索关键词（如：李白、静夜思、明月）" style="width: 400px;">
+                <button onclick="testSearch()">测试搜索</button>
+            </div>
+            <div id="search-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>3. 测试SQL查询</h3>
+            <button onclick="testRawSQL()">测试原始SQL查询</button>
+            <div id="sql-result" class="result"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // 初始化Supabase客户端
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = isError ? 'result error' : 'result success';
+        }
+        
+        async function checkPoemsData() {
+            showResult('poems-data-result', '正在查询诗词数据...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .limit(10);
+                
+                if (error) {
+                    showResult('poems-data-result', '查询失败: ' + error.message, true);
+                } else {
+                    showResult('poems-data-result', 
+                        `找到 ${data.length} 首诗词:\n\n` +
+                        data.map(p => 
+                            `标题: ${p.title}\n` +
+                            `诗人: ${p.poet_name || 'undefined'}\n` +
+                            `ID: ${p.id}\n` +
+                            `内容预览: ${p.content.substring(0, 50)}...\n` +
+                            `---`
+                        ).join('\n')
+                    );
+                }
+            } catch (error) {
+                showResult('poems-data-result', '查询异常: ' + error.message, true);
+            }
+        }
+        
+        async function testSearch() {
+            const searchTerm = document.getElementById('search-term').value.trim();
+            if (!searchTerm) {
+                showResult('search-result', '请输入搜索关键词', true);
+                return;
+            }
+            
+            showResult('search-result', `正在搜索: "${searchTerm}"...`);
+            try {
+                // 先获取所有诗词数据用于调试
+                const { data: allData, error: allError } = await supabase
+                    .from('poems')
+                    .select('*');
+                
+                if (allError) {
+                    showResult('search-result', '获取诗词数据失败: ' + allError.message, true);
+                    return;
+                }
+                
+                // 测试搜索功能 - 只搜索标题和内容
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .or(`title.ilike.%${searchTerm}%,content.ilike.%${searchTerm}%`)
+                    .order('created_at', { ascending: false });
+                
+                if (error) {
+                    showResult('search-result', 
+                        `搜索失败: ${error.message}\n\n` +
+                        `数据库中共有 ${allData.length} 首诗词:\n` +
+                        allData.map(p => `- ${p.title} (ID: ${p.id})`).join('\n') +
+                        `\n\n手动匹配结果:\n` +
+                        allData.filter(p => 
+                            p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            p.content.toLowerCase().includes(searchTerm.toLowerCase())
+                        ).map(p => `- ${p.title} (匹配)`).join('\n') +
+                        `\n\n搜索SQL: SELECT * FROM poems WHERE title ILIKE '%${searchTerm}%' OR content ILIKE '%${searchTerm}%'`
+                    , true);
+                } else {
+                    showResult('search-result', 
+                        `搜索 "${searchTerm}" 找到 ${data.length} 个结果:\n\n` +
+                        `数据库中共有 ${allData.length} 首诗词:\n` +
+                        allData.map(p => `- ${p.title} (ID: ${p.id})`).join('\n') +
+                        `\n\n搜索结果:\n` +
+                        data.map(p => 
+                            `标题: ${p.title}\n` +
+                            `内容预览: ${p.content.substring(0, 50)}...\n` +
+                            `标题包含 "${searchTerm}": ${p.title.toLowerCase().includes(searchTerm.toLowerCase()) ? '是' : '否'}\n` +
+                            `内容包含 "${searchTerm}": ${p.content.toLowerCase().includes(searchTerm.toLowerCase()) ? '是' : '否'}\n` +
+                            `---`
+                        ).join('\n') +
+                        `\n\n搜索SQL: SELECT * FROM poems WHERE title ILIKE '%${searchTerm}%' OR content ILIKE '%${searchTerm}%'`
+                    );
+                }
+            } catch (error) {
+                showResult('search-result', '搜索异常: ' + error.message, true);
+            }
+        }
+        
+        async function testRawSQL() {
+            showResult('sql-result', '正在测试SQL查询...');
+            try {
+                // 测试简单的查询
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .ilike('title', '%静夜思%');
+                
+                if (error) {
+                    showResult('sql-result', 'SQL查询失败: ' + error.message, true);
+                } else {
+                    showResult('sql-result', 
+                        `直接查询标题包含"静夜思"的结果: ${data.length} 个\n` +
+                        data.map(p => `- ${p.title} (${p.poet_name || 'undefined'})`).join('\n')
+                    );
+                }
+            } catch (error) {
+                showResult('sql-result', 'SQL查询异常: ' + error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

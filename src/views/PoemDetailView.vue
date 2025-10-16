@@ -32,8 +32,16 @@
       <div class="comments-list">
         <div v-for="comment in comments" :key="comment.id" class="comment-item">
           <div class="comment-header">
-            <span class="username">{{ comment.profiles.username }}</span>
+            <span class="username">{{ comment.profiles?.username || '未知用户' }}</span>
             <span class="date">{{ formatDate(comment.created_at) }}</span>
+            <button 
+              v-if="authStore.user && comment.user_id === authStore.user.id"
+              @click="deleteComment(comment.id)"
+              class="delete-btn"
+              title="删除评论"
+            >
+              删除
+            </button>
           </div>
           <div class="comment-content">{{ comment.content }}</div>
         </div>
@@ -44,11 +52,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { supabase, TABLES } from '../supabase'
 import { formatDate, formatPoemContent } from '../utils/helpers'
+
+const notification = inject('notification')
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -68,81 +78,148 @@ const formatContent = (content) => {
 const loadPoem = async () => {
   const { data, error } = await supabase
     .from(TABLES.POEMS)
-    .select(`
-      *,
-      poets (name)
-    `)
+    .select('*')
     .eq('id', route.params.id)
     .single()
 
   if (!error && data) {
-    poem.value = {
-      ...data,
-      poet_name: data.poets?.name || data.poet_name
-    }
+    poem.value = data
+  } else if (error) {
+    console.error('加载诗词详情失败:', error)
   }
 }
 
 const loadComments = async () => {
-  const { data, error } = await supabase
-    .from(TABLES.COMMENTS)
-    .select(`
-      *,
-      profiles (username)
-    `)
-    .eq('poem_id', route.params.id)
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from(TABLES.COMMENTS)
+      .select(`
+        *,
+        profiles (username)
+      `)
+      .eq('poem_id', route.params.id)
+      .order('created_at', { ascending: false })
 
-  if (!error) {
-    comments.value = data
+    if (error) {
+      console.error('加载评论失败:', error)
+      comments.value = []
+    } else {
+      comments.value = data || []
+      console.log('加载到的评论:', data)
+    }
+  } catch (error) {
+    console.error('加载评论异常:', error)
+    comments.value = []
   }
 }
 
 const loadFavorites = async () => {
   if (!authStore.user) return
   
-  const { data, error } = await supabase
-    .from(TABLES.FAVORITES)
-    .select('poem_id')
-    .eq('user_id', authStore.user.id)
-    .eq('poem_id', route.params.id)
+  try {
+    const { data, error } = await supabase
+      .from(TABLES.FAVORITES)
+      .select('id, poem_id')
+      .eq('user_id', authStore.user.id)
+      .eq('poem_id', route.params.id)
 
-  if (!error) {
-    favorites.value = data
+    if (error) throw error
+    favorites.value = data || []
+  } catch (error) {
+    console.error('加载收藏失败:', error)
+    favorites.value = []
   }
 }
 
 const toggleFavorite = async () => {
   if (!authStore.user) return
 
-  if (isFavorite.value) {
-    await supabase
-      .from(TABLES.FAVORITES)
-      .delete()
-      .eq('poem_id', poem.value.id)
-      .eq('user_id', authStore.user.id)
-  } else {
-    await supabase
-      .from(TABLES.FAVORITES)
-      .insert([{ poem_id: poem.value.id, user_id: authStore.user.id }])
+  try {
+    if (isFavorite.value) {
+      // 取消收藏 - 删除对应的收藏记录
+      const favoriteToDelete = favorites.value.find(fav => fav.poem_id === poem.value.id)
+      if (favoriteToDelete) {
+        const { error } = await supabase
+          .from(TABLES.FAVORITES)
+          .delete()
+          .eq('id', favoriteToDelete.id)
+
+        if (error) throw error
+        notification.success('已取消收藏')
+      }
+    } else {
+      // 添加收藏
+      const { error } = await supabase
+        .from(TABLES.FAVORITES)
+        .insert([{ 
+          poem_id: poem.value.id, 
+          user_id: authStore.user.id 
+        }])
+
+      if (error) throw error
+      notification.success('收藏成功！')
+    }
+    // 重新加载收藏状态
+    await loadFavorites()
+  } catch (error) {
+    console.error('收藏操作失败:', error)
+    if (error.code === '23505') {
+      notification.error('已经收藏过这首诗词了')
+    } else {
+      notification.error('操作失败，请重试')
+    }
   }
-  loadFavorites()
 }
 
 const submitComment = async () => {
-  if (!newComment.value.trim() || !authStore.user) return
+  if (!newComment.value.trim() || !authStore.user) {
+    notification.error('请先登录并输入评论内容')
+    return
+  }
 
-  const { error } = await supabase
-    .from(TABLES.COMMENTS)
-    .insert([{
-      content: newComment.value,
-      poem_id: poem.value.id,
-      user_id: authStore.user.id
-    }])
+  try {
+    const { error } = await supabase
+      .from(TABLES.COMMENTS)
+      .insert([{
+        content: newComment.value.trim(),
+        poem_id: poem.value.id,
+        user_id: authStore.user.id
+      }])
 
-  if (!error) {
-    newComment.value = ''
-    loadComments()
+    if (error) {
+      console.error('发表评论失败:', error)
+      notification.error('发表评论失败: ' + error.message)
+    } else {
+      newComment.value = ''
+      notification.success('评论发表成功！')
+      await loadComments()
+    }
+  } catch (error) {
+    console.error('发表评论异常:', error)
+    notification.error('发表评论异常，请重试')
+  }
+}
+
+const deleteComment = async (commentId) => {
+  if (!authStore.user) return
+
+  try {
+    const { error } = await supabase
+      .from(TABLES.COMMENTS)
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', authStore.user.id) // 确保只能删除自己的评论
+
+    if (error) {
+      console.error('删除评论失败:', error)
+      notification.error('删除评论失败: ' + error.message)
+    } else {
+      notification.success('评论删除成功！')
+      await loadComments()
+    }
+  } catch (error) {
+    console.error('删除评论异常:', error)
+    notification.error('删除评论异常，请重试')
   }
 }
 
@@ -260,6 +337,7 @@ onMounted(() => {
 .comment-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 0.5rem;
 }
 
@@ -271,6 +349,22 @@ onMounted(() => {
 .date {
   color: #666;
   font-size: 0.9rem;
+  margin-right: auto;
+  margin-left: 10px;
+}
+
+.delete-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.delete-btn:hover {
+  background: #c82333;
 }
 
 .loading {

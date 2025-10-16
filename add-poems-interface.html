@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加诗词界面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        input, textarea, select { padding: 8px; margin: 5px; width: 100%; box-sizing: border-box; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>添加诗词到数据库</h1>
+        
+        <div class="section">
+            <h3>1. 当前诗词统计</h3>
+            <button onclick="getPoemStats()">查看诗词统计</button>
+            <div id="stats-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>2. 快速添加示例诗词</h3>
+            <button onclick="addSamplePoems()">添加示例诗词（10首）</button>
+            <div id="sample-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>3. 手动添加诗词</h3>
+            <div class="form-group">
+                <label>标题:</label>
+                <input type="text" id="poem-title" placeholder="诗词标题">
+            </div>
+            <div class="form-group">
+                <label>内容:</label>
+                <textarea id="poem-content" placeholder="诗词内容" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label>诗人:</label>
+                <input type="text" id="poet-name" placeholder="诗人名字">
+            </div>
+            <div class="form-group">
+                <label>朝代:</label>
+                <select id="dynasty">
+                    <option value="唐">唐</option>
+                    <option value="宋">宋</option>
+                    <option value="元">元</option>
+                    <option value="明">明</option>
+                    <option value="清">清</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>主题:</label>
+                <input type="text" id="theme" placeholder="诗词主题（如：爱情、离别、山水等）">
+            </div>
+            <div class="form-group">
+                <label>赏析:</label>
+                <textarea id="appreciation" placeholder="诗词赏析" rows="3"></textarea>
+            </div>
+            <button onclick="addCustomPoem()">添加诗词</button>
+            <div id="custom-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>4. 验证添加结果</h3>
+            <button onclick="verifyPoems()">验证所有诗词</button>
+            <div id="verify-result" class="result"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // 初始化Supabase客户端
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = isError ? 'result error' : 'result success';
+        }
+        
+        async function getPoemStats() {
+            showResult('stats-result', '正在获取统计信息...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*');
+                
+                if (error) {
+                    showResult('stats-result', '获取失败: ' + error.message, true);
+                } else {
+                    const poetCount = [...new Set(data.map(p => p.poet_name))].length;
+                    showResult('stats-result', 
+                        `诗词统计:\n` +
+                        `- 总诗词数: ${data.length} 首\n` +
+                        `- 诗人数量: ${poetCount} 位\n` +
+                        `- 诗人分布:\n` +
+                        data.reduce((acc, poem) => {
+                            acc[poem.poet_name] = (acc[poem.poet_name] || 0) + 1;
+                            return acc;
+                        }, {})
+                    );
+                }
+            } catch (error) {
+                showResult('stats-result', '获取异常: ' + error.message, true);
+            }
+        }
+        
+        async function addSamplePoems() {
+            showResult('sample-result', '正在添加示例诗词...');
+            try {
+                const samplePoems = [
+                    {
+                        title: '相思',
+                        content: '红豆生南国，春来发几枝。愿君多采撷，此物最相思。',
+                        poet_name: '王维',
+                        dynasty: '唐',
+                        theme: '爱情',
+                        appreciation: '这首诗以红豆起兴，借物抒情，表达了深切的相思之情。语言简练，意境深远。'
+                    },
+                    {
+                        title: '声声慢',
+                        content: '寻寻觅觅，冷冷清清，凄凄惨惨戚戚。乍暖还寒时候，最难将息。',
+                        poet_name: '李清照',
+                        dynasty: '宋',
+                        theme: '忧伤',
+                        appreciation: '这首词以细腻的笔触描绘了词人内心的孤寂和忧伤，是婉约词的代表作。'
+                    }
+                    // 可以继续添加更多示例诗词
+                ];
+                
+                const { data, error } = await supabase
+                    .from('poems')
+                    .insert(samplePoems)
+                    .select();
+                
+                if (error) {
+                    showResult('sample-result', '添加失败: ' + error.message, true);
+                } else {
+                    showResult('sample-result', `✓ 成功添加 ${data.length} 首示例诗词！`);
+                }
+            } catch (error) {
+                showResult('sample-result', '添加异常: ' + error.message, true);
+            }
+        }
+        
+        async function addCustomPoem() {
+            const title = document.getElementById('poem-title').value.trim();
+            const content = document.getElementById('poem-content').value.trim();
+            const poetName = document.getElementById('poet-name').value.trim();
+            const dynasty = document.getElementById('dynasty').value;
+            const theme = document.getElementById('theme').value.trim();
+            const appreciation = document.getElementById('appreciation').value.trim();
+            
+            if (!title || !content || !poetName) {
+                showResult('custom-result', '请填写标题、内容和诗人名字', true);
+                return;
+            }
+            
+            showResult('custom-result', '正在添加诗词...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .insert([{
+                        title,
+                        content,
+                        poet_name: poetName,
+                        dynasty,
+                        theme: theme || '其他',
+                        appreciation: appreciation || '暂无赏析'
+                    }])
+                    .select();
+                
+                if (error) {
+                    showResult('custom-result', '添加失败: ' + error.message, true);
+                } else {
+                    showResult('custom-result', `✓ 成功添加诗词: ${title}`);
+                    // 清空表单
+                    document.getElementById('poem-title').value = '';
+                    document.getElementById('poem-content').value = '';
+                    document.getElementById('poet-name').value = '';
+                    document.getElementById('theme').value = '';
+                    document.getElementById('appreciation').value = '';
+                }
+            } catch (error) {
+                showResult('custom-result', '添加异常: ' + error.message, true);
+            }
+        }
+        
+        async function verifyPoems() {
+            showResult('verify-result', '正在验证诗词数据...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                
+                if (error) {
+                    showResult('verify-result', '验证失败: ' + error.message, true);
+                } else {
+                    showResult('verify-result', 
+                        `最新添加的 ${data.length} 首诗词:\n\n` +
+                        data.map(p => 
+                            `标题: ${p.title}\n` +
+                            `诗人: ${p.poet_name}\n` +
+                            `朝代: ${p.dynasty}\n` +
+                            `主题: ${p.theme}\n` +
+                            `---`
+                        ).join('\n')
+                    );
+                }
+            } catch (error) {
+                showResult('verify-result', '验证异常: ' + error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

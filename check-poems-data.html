@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>检查诗词数据</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; font-family: monospace; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        .poem { margin: 10px 0; padding: 10px; border: 1px solid #eee; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>检查诗词数据库</h1>
+        
+        <div class="section">
+            <h3>1. 检查所有诗词</h3>
+            <button onclick="getAllPoems()">查看所有诗词</button>
+            <div id="all-poems-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>2. 检查诗人数据</h3>
+            <button onclick="getAllPoets()">查看所有诗人</button>
+            <div id="all-poets-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>3. 检查原始的三首诗词</h3>
+            <button onclick="checkOriginalPoems()">检查原始诗词</button>
+            <div id="original-poems-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>4. 检查数据库表结构</h3>
+            <button onclick="checkTableStructure()">检查表结构</button>
+            <div id="table-structure-result" class="result"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // 初始化Supabase客户端
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = isError ? 'result error' : 'result success';
+        }
+        
+        async function getAllPoems() {
+            showResult('all-poems-result', '正在获取所有诗词...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+                
+                if (error) {
+                    showResult('all-poems-result', '获取失败: ' + error.message, true);
+                } else {
+                    const result = data.map((poem, index) => 
+                        `诗词 ${index + 1}:\n` +
+                        `- ID: ${poem.id}\n` +
+                        `- 标题: ${poem.title}\n` +
+                        `- 诗人: ${poem.poet_name || '未知'}\n` +
+                        `- 朝代: ${poem.dynasty}\n` +
+                        `- 创建时间: ${poem.created_at}\n` +
+                        `---`
+                    ).join('\n');
+                    
+                    showResult('all-poems-result', 
+                        `总共找到 ${data.length} 首诗词:\n\n${result}`
+                    );
+                }
+            } catch (error) {
+                showResult('all-poems-result', '获取异常: ' + error.message, true);
+            }
+        }
+        
+        async function getAllPoets() {
+            showResult('all-poets-result', '正在获取所有诗人...');
+            try {
+                const { data, error } = await supabase
+                    .from('poets')
+                    .select('*')
+                    .order('name');
+                
+                if (error) {
+                    showResult('all-poets-result', '获取失败: ' + error.message, true);
+                } else {
+                    const result = data.map((poet, index) => 
+                        `诗人 ${index + 1}:\n` +
+                        `- ID: ${poet.id}\n` +
+                        `- 姓名: ${poet.name}\n` +
+                        `- 朝代: ${poet.dynasty}\n` +
+                        `- 生卒: ${poet.lifespan}\n` +
+                        `---`
+                    ).join('\n');
+                    
+                    showResult('all-poets-result', 
+                        `总共找到 ${data.length} 位诗人:\n\n${result}`
+                    );
+                }
+            } catch (error) {
+                showResult('all-poets-result', '获取异常: ' + error.message, true);
+            }
+        }
+        
+        async function checkOriginalPoems() {
+            showResult('original-poems-result', '正在检查原始三首诗词...');
+            try {
+                // 检查静夜思
+                const { data: jingyesi, error: error1 } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .ilike('title', '%静夜思%');
+                
+                // 检查春望
+                const { data: chunwang, error: error2 } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .ilike('title', '%春望%');
+                
+                // 检查水调歌头
+                const { data: shuidiaogetou, error: error3 } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .ilike('title', '%水调歌头%');
+                
+                if (error1 || error2 || error3) {
+                    showResult('original-poems-result', '检查失败', true);
+                } else {
+                    const result = 
+                        `静夜思: ${jingyesi.length} 首\n` +
+                        `春望: ${chunwang.length} 首\n` +
+                        `水调歌头: ${shuidiaogetou.length} 首\n\n` +
+                        `原始诗词状态:\n` +
+                        `- 静夜思: ${jingyesi.length > 0 ? '存在' : '缺失'}\n` +
+                        `- 春望: ${chunwang.length > 0 ? '存在' : '缺失'}\n` +
+                        `- 水调歌头: ${shuidiaogetou.length > 0 ? '存在' : '缺失'}`;
+                    
+                    showResult('original-poems-result', result);
+                }
+            } catch (error) {
+                showResult('original-poems-result', '检查异常: ' + error.message, true);
+            }
+        }
+        
+        async function checkTableStructure() {
+            showResult('table-structure-result', '正在检查表结构...');
+            try {
+                // 检查poems表的列信息
+                const { data: poemsData, error: poemsError } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .limit(1);
+                
+                if (poemsError) {
+                    showResult('table-structure-result', '检查poems表失败: ' + poemsError.message, true);
+                    return;
+                }
+                
+                if (poemsData && poemsData.length > 0) {
+                    const samplePoem = poemsData[0];
+                    const columns = Object.keys(samplePoem);
+                    
+                    showResult('table-structure-result', 
+                        `poems表结构:\n` +
+                        `列名: ${columns.join(', ')}\n\n` +
+                        `示例数据:\n` +
+                        JSON.stringify(samplePoem, null, 2)
+                    );
+                } else {
+                    showResult('table-structure-result', 'poems表为空');
+                }
+            } catch (error) {
+                showResult('table-structure-result', '检查异常: ' + error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

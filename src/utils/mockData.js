@@ -33,6 +33,9 @@ export const mockPoems = [
   }
 ]
 
+// 模拟收藏数据
+export const mockFavorites = []
+
 export const mockPoets = [
   {
     id: '1',
@@ -62,12 +65,17 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 // 模拟 Supabase 客户端方法
 export const createMockClient = () => {
+  let currentUser = null
+  let mockFavorites = []
+  
   const createQueryBuilder = (table) => {
     let query = {
       selectColumns: '*',
       whereConditions: [],
       orderBy: null,
-      limitCount: null
+      limitCount: null,
+      insertData: null,
+      deleteConditions: []
     }
     
     const builder = {
@@ -91,6 +99,14 @@ export const createMockClient = () => {
         query.limitCount = count
         return builder
       },
+      insert(data) {
+        query.insertData = data
+        return builder
+      },
+      delete() {
+        query.deleteConditions = query.whereConditions
+        return builder
+      },
       async single() {
         await delay(200)
         if (table === 'poems') {
@@ -112,6 +128,7 @@ export const createMockClient = () => {
       },
       async then(callback) {
         await delay(200)
+        
         if (table === 'poems') {
           let resultData = [...mockPoems]
           
@@ -149,7 +166,68 @@ export const createMockClient = () => {
           }))
           
           callback({ data: poemsWithPoets, error: null })
-        } else {
+        } 
+        else if (table === 'favorites') {
+          // 处理收藏相关操作
+          if (query.insertData) {
+            // 添加收藏
+            const newFavorite = {
+              id: Date.now().toString(),
+              poem_id: query.insertData[0].poem_id,
+              user_id: query.insertData[0].user_id,
+              created_at: new Date().toISOString()
+            }
+            mockFavorites.push(newFavorite)
+            callback({ data: null, error: null })
+          }
+          else if (query.deleteConditions.length > 0) {
+            // 删除收藏
+            const condition = query.deleteConditions[0]
+            if (condition.field === 'poem_id' && condition.operator === 'eq') {
+              const index = mockFavorites.findIndex(fav => 
+                fav.poem_id === condition.value && fav.user_id === currentUser?.id
+              )
+              if (index > -1) {
+                mockFavorites.splice(index, 1)
+              }
+            }
+            callback({ data: null, error: null })
+          }
+          else {
+            // 查询收藏
+            let resultData = [...mockFavorites]
+            
+            // 应用条件过滤
+            if (query.whereConditions.length > 0) {
+              query.whereConditions.forEach(condition => {
+                if (condition.field === 'user_id' && condition.operator === 'eq') {
+                  resultData = resultData.filter(fav => fav.user_id === condition.value)
+                }
+                if (condition.field === 'poem_id' && condition.operator === 'eq') {
+                  resultData = resultData.filter(fav => fav.poem_id === condition.value)
+                }
+              })
+            }
+            
+            // 如果查询包含关联数据
+            if (query.selectColumns && query.selectColumns.includes('poems')) {
+              const favoritesWithPoems = resultData.map(fav => {
+                const poem = mockPoems.find(p => p.id === fav.poem_id)
+                return {
+                  ...fav,
+                  poems: {
+                    ...poem,
+                    poets: mockPoets.find(p => p.name === poem.poet_name)
+                  }
+                }
+              })
+              callback({ data: favoritesWithPoems, error: null })
+            } else {
+              callback({ data: resultData, error: null })
+            }
+          }
+        }
+        else {
           callback({ data: [], error: null })
         }
       }
@@ -164,14 +242,19 @@ export const createMockClient = () => {
     auth: {
       async signUp() {
         await delay(500)
-        return { data: { user: { id: 'mock-user' } }, error: null }
+        const user = { id: 'mock-user-' + Date.now() }
+        currentUser = user
+        return { data: { user }, error: null }
       },
       async signInWithPassword() {
         await delay(500)
-        return { data: { user: { id: 'mock-user' } }, error: null }
+        const user = { id: 'mock-user' }
+        currentUser = user
+        return { data: { user }, error: null }
       },
       async signOut() {
         await delay(300)
+        currentUser = null
         return { error: null }
       }
     },

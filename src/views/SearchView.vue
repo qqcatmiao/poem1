@@ -48,20 +48,35 @@ const performSearch = async () => {
 
   loading.value = true
   
-  const { data, error } = await supabase
-    .from(TABLES.POEMS)
-    .select(`
-      *,
-      poets (name)
-    `)
-    .or(`title.ilike.%${searchQuery.value}%,content.ilike.%${searchQuery.value}%,poets.name.ilike.%${searchQuery.value}%`)
-    .order('created_at', { ascending: false })
+  try {
+    // 先尝试包含诗人名字的搜索
+    const { data, error } = await supabase
+      .from(TABLES.POEMS)
+      .select('*')
+      .or(`title.ilike.%${searchQuery.value}%,content.ilike.%${searchQuery.value}%,poet_name.ilike.%${searchQuery.value}%`)
+      .order('created_at', { ascending: false })
 
-  if (!error && data) {
-    searchResults.value = data.map(poem => ({
-      ...poem,
-      poet_name: poem.poets?.name || poem.poet_name
-    }))
+    if (error) {
+      // 如果包含诗人名字的搜索失败，回退到只搜索标题和内容
+      console.warn('包含诗人名字的搜索失败，回退到基本搜索:', error)
+      const { data: basicData, error: basicError } = await supabase
+        .from(TABLES.POEMS)
+        .select('*')
+        .or(`title.ilike.%${searchQuery.value}%,content.ilike.%${searchQuery.value}%`)
+        .order('created_at', { ascending: false })
+      
+      if (!basicError && basicData) {
+        searchResults.value = basicData
+      } else if (basicError) {
+        console.error('基本搜索也失败:', basicError)
+        searchResults.value = []
+      }
+    } else {
+      searchResults.value = data
+    }
+  } catch (error) {
+    console.error('搜索异常:', error)
+    searchResults.value = []
   }
   
   loading.value = false
@@ -70,9 +85,13 @@ const performSearch = async () => {
 const handleSearch = debounce(performSearch, 300)
 
 const getContentPreview = (content) => {
+  if (!searchQuery.value.trim()) {
+    return content.substring(0, 100) + (content.length > 100 ? '...' : '')
+  }
+  
   const index = content.toLowerCase().indexOf(searchQuery.value.toLowerCase())
   if (index === -1) {
-    return content.substring(0, 100) + '...'
+    return content.substring(0, 100) + (content.length > 100 ? '...' : '')
   }
   
   const start = Math.max(0, index - 30)

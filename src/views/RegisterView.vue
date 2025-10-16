@@ -67,7 +67,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { supabase, TABLES } from '../supabase'
+import { supabase } from '../supabase'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -100,29 +100,29 @@ const handleRegister = async () => {
   success.value = false
 
   try {
-    // 注册用户
-    const { data: authData, error: authError } = await authStore.signUp(email.value, password.value)
+    // 使用Supabase Auth注册用户，并传递用户名到用户元数据
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.value,
+      password: password.value,
+      options: {
+        data: {
+          username: username.value
+        }
+      }
+    })
     
     if (authError) throw authError
 
-    // 创建用户档案
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from(TABLES.PROFILES)
-        .insert([{
-          id: authData.user.id,
-          username: username.value
-        }])
-
-      if (profileError) throw profileError
-    }
-
+    // 用户档案将通过数据库触发器自动创建
+    // 或者在前端监听认证状态变化时创建
+    
     success.value = true
     setTimeout(() => {
       router.push('/login')
     }, 2000)
   } catch (err) {
     error.value = err.message
+    console.error('注册错误:', err)
   }
 
   loading.value = false

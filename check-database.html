@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库状态检查</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        input, select { padding: 5px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>数据库状态检查</h1>
+        
+        <div class="section">
+            <h3>0. 用户登录</h3>
+            <div id="login-section">
+                <div id="login-form">
+                    <div>
+                        <label>邮箱: </label>
+                        <input type="email" id="login-email" placeholder="输入邮箱">
+                    </div>
+                    <div>
+                        <label>密码: </label>
+                        <input type="password" id="login-password" placeholder="输入密码">
+                    </div>
+                    <button onclick="login()">登录</button>
+                    <button onclick="signup()">注册</button>
+                    <button onclick="logout()" style="background: #dc3545;">退出登录</button>
+                </div>
+                <div id="user-info" style="display: none;">
+                    <p>已登录用户: <span id="current-user"></span></p>
+                </div>
+            </div>
+            <div id="login-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>1. 检查Supabase连接</h3>
+            <button onclick="testConnection()">测试连接</button>
+            <div id="connection-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>2. 检查诗词表</h3>
+            <button onclick="testPoemsTable()">查询诗词</button>
+            <div id="poems-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>3. 检查收藏表</h3>
+            <button onclick="testFavoritesTable()">查询收藏</button>
+            <div id="favorites-result" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h3>4. 测试收藏功能</h3>
+            <div>
+                <label>选择诗词: </label>
+                <select id="poem-select" style="width: 300px;">
+                    <option value="">-- 请选择诗词 --</option>
+                </select>
+                <button onclick="loadPoems()">刷新诗词列表</button>
+            </div>
+            <div>
+                <button onclick="testAddFavorite()">添加收藏</button>
+                <button onclick="testRemoveFavorite()">取消收藏</button>
+            </div>
+            <div id="favorite-test-result" class="result"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        // 初始化Supabase客户端
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', async function() {
+            await checkAuthState();
+        });
+        
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = isError ? 'result error' : 'result success';
+        }
+        
+        async function checkAuthState() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                document.getElementById('login-form').style.display = 'none';
+                document.getElementById('user-info').style.display = 'block';
+                document.getElementById('current-user').textContent = user.email;
+            } else {
+                document.getElementById('login-form').style.display = 'block';
+                document.getElementById('user-info').style.display = 'none';
+            }
+        }
+        
+        async function login() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            
+            if (!email || !password) {
+                showResult('login-result', '请输入邮箱和密码', true);
+                return;
+            }
+            
+            showResult('login-result', '正在登录...');
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    showResult('login-result', '登录失败: ' + error.message, true);
+                } else {
+                    showResult('login-result', '✓ 登录成功！');
+                    await checkAuthState();
+                }
+            } catch (error) {
+                showResult('login-result', '登录异常: ' + error.message, true);
+            }
+        }
+        
+        async function signup() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            
+            if (!email || !password) {
+                showResult('login-result', '请输入邮箱和密码', true);
+                return;
+            }
+            
+            if (password.length < 6) {
+                showResult('login-result', '密码至少需要6位', true);
+                return;
+            }
+            
+            showResult('login-result', '正在注册...');
+            try {
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    showResult('login-result', '注册失败: ' + error.message, true);
+                } else {
+                    showResult('login-result', '✓ 注册成功！请检查邮箱确认邮件。');
+                }
+            } catch (error) {
+                showResult('login-result', '注册异常: ' + error.message, true);
+            }
+        }
+        
+        async function logout() {
+            showResult('login-result', '正在退出...');
+            try {
+                const { error } = await supabase.auth.signOut();
+                if (error) {
+                    showResult('login-result', '退出失败: ' + error.message, true);
+                } else {
+                    showResult('login-result', '✓ 已退出登录');
+                    await checkAuthState();
+                }
+            } catch (error) {
+                showResult('login-result', '退出异常: ' + error.message, true);
+            }
+        }
+        
+        async function testConnection() {
+            showResult('connection-result', '正在测试连接...');
+            try {
+                const { data, error } = await supabase.from('poems').select('count').limit(1);
+                if (error) {
+                    showResult('connection-result', '连接失败: ' + error.message, true);
+                } else {
+                    showResult('connection-result', '✓ 连接成功！Supabase配置正确。');
+                }
+            } catch (error) {
+                showResult('connection-result', '连接异常: ' + error.message, true);
+            }
+        }
+        
+        async function testPoemsTable() {
+            showResult('poems-result', '正在查询诗词...');
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .limit(5);
+                
+                if (error) {
+                    showResult('poems-result', '查询失败: ' + error.message, true);
+                } else {
+                    showResult('poems-result', `找到 ${data.length} 首诗词:\n` + 
+                        data.map(p => `- ${p.title} (ID: ${p.id})`).join('\n'));
+                }
+            } catch (error) {
+                showResult('poems-result', '查询异常: ' + error.message, true);
+            }
+        }
+        
+        async function testFavoritesTable() {
+            showResult('favorites-result', '正在查询收藏...');
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    showResult('favorites-result', '请先登录才能查看收藏', true);
+                    return;
+                }
+                
+                const { data, error } = await supabase
+                    .from('favorites')
+                    .select('*, poems(title)')
+                    .eq('user_id', user.id);
+                
+                if (error) {
+                    showResult('favorites-result', '查询失败: ' + error.message, true);
+                } else {
+                    showResult('favorites-result', `用户 ${user.id} 有 ${data.length} 个收藏:\n` + 
+                        data.map(f => `- 诗词ID: ${f.poem_id} (收藏ID: ${f.id})`).join('\n'));
+                }
+            } catch (error) {
+                showResult('favorites-result', '查询异常: ' + error.message, true);
+            }
+        }
+        
+        async function loadPoems() {
+            const select = document.getElementById('poem-select');
+            select.innerHTML = '<option value="">-- 正在加载... --</option>';
+            
+            try {
+                const { data, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .order('title');
+                
+                if (error) {
+                    showResult('favorite-test-result', '加载诗词失败: ' + error.message, true);
+                    select.innerHTML = '<option value="">-- 加载失败 --</option>';
+                } else {
+                    select.innerHTML = '<option value="">-- 请选择诗词 --</option>';
+                    data.forEach(poem => {
+                        const option = document.createElement('option');
+                        option.value = poem.id;
+                        option.textContent = `${poem.title} (ID: ${poem.id})`;
+                        select.appendChild(option);
+                    });
+                    showResult('favorite-test-result', `✓ 加载了 ${data.length} 首诗词`);
+                }
+            } catch (error) {
+                showResult('favorite-test-result', '加载异常: ' + error.message, true);
+                select.innerHTML = '<option value="">-- 加载异常 --</option>';
+            }
+        }
+        
+        async function testAddFavorite() {
+            const select = document.getElementById('poem-select');
+            const poemId = select.value;
+            
+            if (!poemId) {
+                showResult('favorite-test-result', '请先选择一首诗词', true);
+                return;
+            }
+            
+            showResult('favorite-test-result', '正在添加收藏...');
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    showResult('favorite-test-result', '请先登录', true);
+                    return;
+                }
+                
+                const { data, error } = await supabase
+                    .from('favorites')
+                    .insert([{ poem_id: poemId, user_id: user.id }])
+                    .select();
+                
+                if (error) {
+                    showResult('favorite-test-result', '添加失败: ' + error.message, true);
+                } else {
+                    showResult('favorite-test-result', '✓ 收藏添加成功！ID: ' + data[0].id);
+                }
+            } catch (error) {
+                showResult('favorite-test-result', '操作异常: ' + error.message, true);
+            }
+        }
+        
+        async function testRemoveFavorite() {
+            const select = document.getElementById('poem-select');
+            const poemId = select.value;
+            
+            if (!poemId) {
+                showResult('favorite-test-result', '请先选择一首诗词', true);
+                return;
+            }
+            
+            showResult('favorite-test-result', '正在取消收藏...');
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    showResult('favorite-test-result', '请先登录', true);
+                    return;
+                }
+                
+                const { error } = await supabase
+                    .from('favorites')
+                    .delete()
+                    .eq('poem_id', poemId)
+                    .eq('user_id', user.id);
+                
+                if (error) {
+                    showResult('favorite-test-result', '取消失败: ' + error.message, true);
+                } else {
+                    showResult('favorite-test-result', '✓ 收藏取消成功！');
+                }
+            } catch (error) {
+                showResult('favorite-test-result', '操作异常: ' + error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -65,7 +65,9 @@ const handleLogin = async () => {
   if (authError) {
     error.value = authError.message
   } else {
-    router.push('/')
+    // 登录后重定向到之前访问的页面或首页
+    const redirectPath = router.currentRoute.value.query.redirect || '/'
+    router.push(redirectPath)
   }
 
   loading.value = false

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>收藏功能测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>收藏功能测试</h1>
+    <div id="result"></div>
+    
+    <script>
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        async function testFavorites() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                resultDiv.innerHTML = '<p>正在测试收藏功能...</p>';
+                
+                // 1. 测试诗词表
+                const { data: poems, error: poemsError } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .limit(3);
+                
+                if (poemsError) {
+                    resultDiv.innerHTML = `<p style="color: red;">❌ 诗词表查询错误: ${poemsError.message}</p>`;
+                    return;
+                }
+                
+                resultDiv.innerHTML += `<p style="color: green;">✅ 诗词表正常，有 ${poems.length} 首诗词</p>`;
+                
+                // 2. 测试收藏表是否存在
+                const { data: favorites, error: favoritesError } = await supabase
+                    .from('favorites')
+                    .select('*')
+                    .limit(1);
+                
+                if (favoritesError) {
+                    if (favoritesError.code === '42P01') {
+                        resultDiv.innerHTML += `<p style="color: red;">❌ 收藏表不存在！需要创建 favorites 表</p>`;
+                    } else {
+                        resultDiv.innerHTML += `<p style="color: red;">❌ 收藏表查询错误: ${favoritesError.message}</p>`;
+                    }
+                } else {
+                    resultDiv.innerHTML += `<p style="color: green;">✅ 收藏表正常，有 ${favorites.length} 条收藏记录</p>`;
+                }
+                
+                // 3. 显示诗词列表用于测试
+                resultDiv.innerHTML += '<h3>可用的诗词：</h3>';
+                poems.forEach(poem => {
+                    resultDiv.innerHTML += `
+                        <div style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
+                            <strong>${poem.title}</strong> - ${poem.poet_name} (${poem.dynasty})<br>
+                            ID: ${poem.id}
+                        </div>
+                    `;
+                });
+                
+            } catch (err) {
+                resultDiv.innerHTML = `<p style="color: red;">❌ 测试失败: ${err.message}</p>`;
+            }
+        }
+        
+        testFavorites();
+    </script>
+</body>
+</html>

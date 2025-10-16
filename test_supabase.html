@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase 连接测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Supabase 连接测试</h1>
+    <div id="result"></div>
+    
+    <script>
+        const supabaseUrl = 'https://rbarqocuypmpybeckwxk.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiYXJxb2N1eXBtcHliZWNrd3hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDkzNjEsImV4cCI6MjA3NjA4NTM2MX0.pfnRg8585zathN6QGRW3IPS-OT-z8RrPGaxWUpttLRQ';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        async function testConnection() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // 测试基本连接
+                resultDiv.innerHTML = '<p>正在测试Supabase连接...</p>';
+                
+                // 测试查询诗词表
+                const { data: poems, error } = await supabase
+                    .from('poems')
+                    .select('*')
+                    .limit(1);
+                
+                if (error) {
+                    if (error.code === 'PGRST301') {
+                        resultDiv.innerHTML = `
+                            <p style="color: red;">❌ 诗词表不存在！需要创建数据库表。</p>
+                            <p>错误信息: ${error.message}</p>
+                            <p>请按照 setup_supabase.md 中的说明创建数据库表。</p>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = `
+                            <p style="color: red;">❌ 连接错误: ${error.message}</p>
+                        `;
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <p style="color: green;">✅ 连接成功！数据库中有 ${poems.length} 首诗词。</p>
+                        <p>诗词数据: ${JSON.stringify(poems)}</p>
+                    `;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `
+                    <p style="color: red;">❌ 测试失败: ${err.message}</p>
+                `;
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>
