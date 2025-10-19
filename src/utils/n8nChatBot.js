@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// n8n工作流测试URL（每次测试需在n8n编辑器中点击"Test workflow"按钮）
-const N8N_WORKFLOW_URL = 'https://n8n-mcwlygnr.us-east-1.clawcloudrun.com/webhook-test/poem-chat'
+// 使用Netlify代理路径解决CORS问题
+const N8N_WORKFLOW_URL = '/n8n/webhook-test/poem-chat'
 
 // 模拟响应（在工作流激活前使用）
 const MOCK_RESPONSES = {
