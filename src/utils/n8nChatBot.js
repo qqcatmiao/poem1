@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // 使用Netlify代理路径解决CORS问题
-const N8N_WORKFLOW_URL = '/n8n/webhook-test/poem-chat'
+const N8N_WORKFLOW_URL = '/n8n/webhook/poem-chat'
 
 // 模拟响应（在工作流激活前使用）
 const MOCK_RESPONSES = {
