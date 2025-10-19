@@ -5,6 +5,7 @@
       <router-view />
     </main>
     <Notification ref="notification" />
+    <ChatBot />
   </div>
 </template>
 
@@ -12,6 +13,7 @@
 import { ref, provide } from 'vue'
 import NavBar from './components/NavBar.vue'
 import Notification from './components/Notification.vue'
+import ChatBot from './components/ChatBot.vue'
 
 const notification = ref()
 

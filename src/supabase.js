@@ -12,7 +12,14 @@ if (!supabaseUrl || !supabaseKey || supabaseUrl === 'your_supabase_project_url_h
 
 // 创建 Supabase 客户端（如果配置了环境变量）
 export const supabase = supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url_here' 
-  ? createClient(supabaseUrl, supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        flowType: 'pkce',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    })
   : createMockClient()
 
 // 数据库表名常量
